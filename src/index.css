@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-slate-200 text-tinta font-sans antialiased;
+    /* En desktop, un fondo neutro detrás del "marco" de celular. */
+  }
+
+  /* Tipografía y áreas táctiles cómodas. */
+  button {
+    touch-action: manipulation;
+  }
+}
+
+@layer utilities {
+  /* Oculta la barra de scroll manteniendo el desplazamiento (filtros horizontales). */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Respeta el notch / área segura en móviles. */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Ajustes de Leaflet dentro del marco móvil. */
+.leaflet-container {
+  font-family: inherit;
+  background: #e8edf5;
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  width: 34px;
+  height: 34px;
+  line-height: 34px;
+}
+.leaflet-control-attribution {
+  font-size: 9px;
+}

@@ -1,0 +1,27 @@
+{
+  "name": "PasaLaVoz",
+  "short_name": "PasaLaVoz",
+  "description": "App comunitaria de seguridad ciudadana y prevención en Lima.",
+  "lang": "es-PE",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F8FB",
+  "theme_color": "#2E5BD7",
+  "categories": ["safety", "social", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
