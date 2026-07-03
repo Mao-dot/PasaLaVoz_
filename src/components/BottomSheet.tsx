@@ -26,7 +26,9 @@ export default function BottomSheet({
   return (
     <div
       className={[
-        'absolute inset-0 z-[1100] flex flex-col justify-end',
+        // overflow-hidden: el panel cerrado (translate-y-full) queda recortado
+        // y no genera scroll fantasma en la página del mapa.
+        'absolute inset-0 z-[1100] flex flex-col justify-end overflow-hidden',
         abierto ? 'pointer-events-auto' : 'pointer-events-none',
       ].join(' ')}
       aria-hidden={!abierto}

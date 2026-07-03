@@ -40,10 +40,13 @@
   }
 }
 
-/* Ajustes de Leaflet dentro del marco móvil. */
+/* ─── Leaflet dentro del marco móvil ─────────────────────────────── */
 .leaflet-container {
   font-family: inherit;
   background: #e8edf5;
+  /* Evita que los panes internos (z-index 200–700) se dibujen sobre
+     la barra de navegación y el botón SOS. */
+  z-index: 0;
 }
 .leaflet-bar a,
 .leaflet-bar a:hover {
@@ -53,4 +56,136 @@
 }
 .leaflet-control-attribution {
   font-size: 9px;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 14px;
+  box-shadow: 0 6px 20px -6px rgba(20, 30, 70, 0.35);
+}
+.leaflet-popup-content {
+  margin: 10px 14px;
+}
+
+/* ─── Marcadores estilo Waze (burbujas con puntita) ──────────────── */
+.marcador-wrap {
+  background: transparent;
+  border: none;
+}
+.marcador-reporte {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: var(--c, #e23b3b);
+  border: 3px solid #fff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.35);
+  animation: pop-in 0.25s ease-out both;
+}
+.marcador-reporte::after {
+  /* puntita blanca (continúa el borde) */
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-top: 10px solid #fff;
+}
+.marcador-reporte::before {
+  /* puntita interior del color del tipo */
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top: 7px solid var(--c, #e23b3b);
+  z-index: 1;
+}
+.marcador-reporte svg {
+  position: relative;
+  z-index: 2;
+}
+.marcador-seguro {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: #1fa971;
+  border: 2.5px solid #fff;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.3);
+  animation: pop-in 0.25s ease-out both;
+}
+
+/* ─── Animaciones reutilizables ──────────────────────────────────── */
+@keyframes pop-in {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.pop-in {
+  animation: pop-in 0.35s ease-out both;
+}
+
+/* Anillos pulsantes del botón SOS */
+@keyframes sos-pulso {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+.sos-anillo {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgba(226, 59, 59, 0.35);
+  animation: sos-pulso 2.2s ease-out infinite;
+  pointer-events: none;
+}
+.sos-anillo-2 {
+  animation-delay: 1.1s;
+}
+
+/* Punto "EN VIVO" parpadeante */
+@keyframes latido {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+.punto-vivo {
+  animation: latido 1.2s ease-in-out infinite;
+}
+
+/* Entrada escalonada (contactos notificados) */
+@keyframes entrar-item {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.entrar-item {
+  animation: entrar-item 0.4s ease-out both;
 }

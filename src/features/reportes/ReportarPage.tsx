@@ -15,7 +15,7 @@ import SafetyBanner from '../../components/SafetyBanner'
 import { useApp } from '../../context/AppContext'
 import { distritos } from '../../data/distritos'
 import type { TipoIncidente } from '../../data/types'
-import { META_INCIDENTE, TIPOS_INCIDENTE } from '../../lib/incidentes'
+import { META_INCIDENTE, TIPOS_INCIDENTE, colorPorIntensidad } from '../../lib/incidentes'
 import { ofuscarCoordenada, jitter } from '../../lib/geo'
 
 // Valor por defecto del campo fecha/hora (ahora, en hora local).
@@ -35,23 +35,25 @@ export default function ReportarPage() {
   const [descripcion, setDescripcion] = useState('')
   const [conFoto, setConFoto] = useState(false)
   const [anonimo, setAnonimo] = useState(true)
-  const [enviado, setEnviado] = useState(false)
+  const [enviado, setEnviado] = useState<{ tipo: TipoIncidente; distrito: string } | null>(null)
 
   const distrito = distritos.find((d) => d.id === distritoId)!
 
   const enviar = () => {
     if (!tipo) return
+    // Si el campo de fecha quedó vacío o inválido, usamos "ahora".
+    const fecha = new Date(cuando)
     // Coordenada de la zona + ruido, y luego ofuscada a ~3 decimales.
     agregarReporte({
       tipo,
       distrito: distrito.nombre,
       lat: ofuscarCoordenada(jitter(distrito.lat)),
       lng: ofuscarCoordenada(jitter(distrito.lng)),
-      fecha: new Date(cuando).toISOString(),
+      fecha: (isNaN(+fecha) ? new Date() : fecha).toISOString(),
       descripcion: descripcion.trim(),
       anonimo,
     })
-    setEnviado(true)
+    setEnviado({ tipo, distrito: distrito.nombre })
   }
 
   // Limpia el formulario para hacer otro reporte (conserva los ya enviados).
@@ -62,11 +64,17 @@ export default function ReportarPage() {
     setDescripcion('')
     setConFoto(false)
     setAnonimo(true)
-    setEnviado(false)
+    setEnviado(null)
   }
 
   if (enviado) {
-    return <Confirmacion onMapa={() => navigate('/mapa')} onOtro={reiniciar} />
+    return (
+      <Confirmacion
+        resumen={enviado}
+        onMapa={() => navigate('/mapa')}
+        onOtro={reiniciar}
+      />
+    )
   }
 
   return (
@@ -74,27 +82,44 @@ export default function ReportarPage() {
       <EncabezadoPagina titulo="Reportar incidente" subtitulo="Tu reporte ayuda a prevenir" />
 
       <div className="space-y-4 p-4">
-        {/* Tipo */}
+        {/* Tipo: tarjetas coloreadas según nivel de riesgo */}
         <section>
           <p className="mb-2 text-sm font-bold">¿Qué ocurrió?</p>
           <div className="grid grid-cols-3 gap-2">
             {TIPOS_INCIDENTE.map((t) => {
-              const { label, Icono } = META_INCIDENTE[t]
+              const { label, Icono, peso, nivel } = META_INCIDENTE[t]
               const activo = tipo === t
+              const color = colorPorIntensidad(peso)
               return (
                 <button
                   key={t}
                   onClick={() => setTipo(t)}
                   aria-pressed={activo}
-                  className={[
-                    'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-center text-[12px] font-semibold transition-colors min-h-[80px]',
+                  style={
                     activo
-                      ? 'border-marca bg-marca-suave text-marca-oscuro'
+                      ? { borderColor: color, backgroundColor: `${color}14` }
+                      : undefined
+                  }
+                  className={[
+                    'flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-2.5 text-center text-[12px] font-semibold transition-all min-h-[92px]',
+                    activo
+                      ? 'shadow-suave'
                       : 'border-borde bg-white text-tinta/70 hover:border-marca/40',
                   ].join(' ')}
                 >
-                  <Icono size={22} className={activo ? 'text-marca' : 'text-tinta/55'} />
-                  {label}
+                  <span
+                    className="grid h-9 w-9 place-items-center rounded-full transition-colors"
+                    style={{ backgroundColor: activo ? color : '#F1F3F9' }}
+                  >
+                    <Icono size={18} color={activo ? '#fff' : '#697086'} />
+                  </span>
+                  <span style={activo ? { color } : undefined}>{label}</span>
+                  <span
+                    className="text-[10px] font-medium leading-none"
+                    style={{ color: activo ? color : '#9AA1B4' }}
+                  >
+                    Riesgo {nivel.toLowerCase()}
+                  </span>
                 </button>
               )
             })}
@@ -144,9 +169,19 @@ export default function ReportarPage() {
 
         {/* Descripción */}
         <section>
-          <label className="mb-2 block text-sm font-bold" htmlFor="desc">
-            Descripción corta <span className="font-normal text-tinta/50">(opcional)</span>
-          </label>
+          <div className="mb-2 flex items-end justify-between">
+            <label className="text-sm font-bold" htmlFor="desc">
+              Descripción corta <span className="font-normal text-tinta/50">(opcional)</span>
+            </label>
+            <span
+              className={[
+                'text-[11px] tabular-nums',
+                descripcion.length >= 220 ? 'font-bold text-sos' : 'text-tinta/40',
+              ].join(' ')}
+            >
+              {descripcion.length}/240
+            </span>
+          </div>
           <textarea
             id="desc"
             value={descripcion}
@@ -168,16 +203,21 @@ export default function ReportarPage() {
             Foto <span className="font-normal text-tinta/50">(opcional)</span>
           </p>
           {conFoto ? (
-            <div className="flex items-center justify-between rounded-xl border border-borde bg-fondo p-3">
-              <span className="flex items-center gap-2 text-sm text-tinta/70">
-                <Camera size={18} className="text-marca" /> Foto adjunta (simulada)
-              </span>
-              <button
-                onClick={() => setConFoto(false)}
-                className="flex items-center gap-1 text-[13px] font-semibold text-sos"
-              >
-                <ImageOff size={15} /> Quitar
-              </button>
+            <div className="overflow-hidden rounded-xl border border-borde">
+              <div className="grid h-24 place-items-center bg-gradient-to-br from-marca-suave to-borde">
+                <Camera size={28} className="text-marca/60" />
+              </div>
+              <div className="flex items-center justify-between bg-white p-2.5">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-tinta/70">
+                  <CheckCircle2 size={15} className="text-seguro" /> Foto adjunta (simulada)
+                </span>
+                <button
+                  onClick={() => setConFoto(false)}
+                  className="flex items-center gap-1 text-[13px] font-semibold text-sos"
+                >
+                  <ImageOff size={15} /> Quitar
+                </button>
+              </div>
             </div>
           ) : (
             <button
@@ -235,17 +275,41 @@ function Interruptor({ activo, onClick }: { activo: boolean; onClick: () => void
   )
 }
 
-function Confirmacion({ onMapa, onOtro }: { onMapa: () => void; onOtro: () => void }) {
+function Confirmacion({
+  resumen,
+  onMapa,
+  onOtro,
+}: {
+  resumen: { tipo: TipoIncidente; distrito: string }
+  onMapa: () => void
+  onOtro: () => void
+}) {
+  const meta = META_INCIDENTE[resumen.tipo]
+  const color = colorPorIntensidad(meta.peso)
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
-      <div className="grid h-20 w-20 place-items-center rounded-full bg-seguro-suave">
+      <div className="pop-in grid h-20 w-20 place-items-center rounded-full bg-seguro-suave">
         <CheckCircle2 size={48} className="text-seguro" />
       </div>
-      <h1 className="mt-5 text-2xl font-extrabold">¡Gracias!</h1>
+      <h1 className="mt-5 text-2xl font-extrabold">¡Reporte enviado!</h1>
       <p className="mt-2 max-w-xs text-[15px] text-tinta/70">
         Tu reporte ayuda a prevenir y a alertar a otras personas. Ya aparece en el mapa de tu
         comunidad.
       </p>
+
+      {/* Resumen de lo reportado */}
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-bold text-white"
+          style={{ backgroundColor: color }}
+        >
+          <meta.Icono size={14} /> {meta.label}
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[13px] font-semibold text-tinta/70 shadow-suave">
+          <MapPin size={14} className="text-marca" /> {resumen.distrito}
+        </span>
+      </div>
+
       <div className="mt-7 grid w-full max-w-xs gap-2">
         <Boton variante="primario" bloque onClick={onMapa}>
           Ver en el mapa

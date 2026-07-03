@@ -95,6 +95,10 @@ src/
 - **Se reportan hechos y zonas, NUNCA personas** (sin nombres, fotos ni placas de presuntos responsables); el formulario lo advierte.
 - Siempre se muestran los **números oficiales** y el aviso de que la app no reemplaza a las emergencias.
 
+## Documentación Adicional
+
+- [**Datos, Impacto y Resultados**](docs/datos_impacto_resultados.md) — Justificación del modelo de datos abiertos, métricas clave (uso, impacto y equidad) y estructura del panel de estadísticas.
+
 ---
 
 ## Stack

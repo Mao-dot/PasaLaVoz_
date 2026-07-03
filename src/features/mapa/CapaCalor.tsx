@@ -17,15 +17,17 @@ export default function CapaCalor({ reportes }: { reportes: Reporte[] }) {
       META_INCIDENTE[r.tipo].peso,
     ])
 
+    // Degradado amarillo → ámbar → rojo, estilo mapa de tráfico de Waze.
     const capa = L.heatLayer(puntos, {
-      radius: 45,
-      blur: 35,
+      radius: 42,
+      blur: 30,
       maxZoom: 17,
-      minOpacity: 0.35,
+      minOpacity: 0.3,
       gradient: {
-        0.2: '#F59E0B',
-        0.5: '#F2772F',
-        0.8: '#E23B3B',
+        0.15: '#FDE047',
+        0.35: '#F59E0B',
+        0.6: '#F2772F',
+        0.85: '#E23B3B',
         1.0: '#B91C1C',
       },
     })

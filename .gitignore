@@ -27,3 +27,6 @@ pnpm-debug.log*
 *.sln
 *.sw?
 Thumbs.db
+
+# Claude
+.claude/*
