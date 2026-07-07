@@ -6,7 +6,9 @@ import {
   LightbulbOff,
   MoreHorizontal,
   Building2,
+  Shield,
   Cross,
+  Pill,
   Bus,
   type LucideIcon,
 } from 'lucide-react'
@@ -50,7 +52,9 @@ export const META_PUNTO_SEGURO: Record<
   { label: string; Icono: LucideIcon }
 > = {
   comisaria: { label: 'Comisaría', Icono: Building2 },
-  farmacia24h: { label: 'Farmacia 24 h', Icono: Cross },
+  serenazgo: { label: 'Serenazgo', Icono: Shield },
+  hospital: { label: 'Hospital / clínica', Icono: Cross },
+  farmacia24h: { label: 'Farmacia 24 h', Icono: Pill },
   paradero_seguro: { label: 'Paradero seguro', Icono: Bus },
 }
 

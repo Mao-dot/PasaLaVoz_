@@ -23,9 +23,16 @@ export interface Reporte {
   descripcion: string
   anonimo: boolean
   estado: EstadoReporte
+  /** Vecinos que confirmaron haber visto lo mismo (validación comunitaria). */
+  confirmaciones: number
 }
 
-export type TipoPuntoSeguro = 'comisaria' | 'farmacia24h' | 'paradero_seguro'
+export type TipoPuntoSeguro =
+  | 'comisaria'
+  | 'serenazgo'
+  | 'hospital'
+  | 'farmacia24h'
+  | 'paradero_seguro'
 
 export interface PuntoSeguro {
   id: string
@@ -48,4 +55,19 @@ export interface Distrito {
   nombre: string
   lat: number
   lng: number
+}
+
+/**
+ * Zona caliente: polígono trazado siguiendo avenidas reales (estilo Waze).
+ * Los reportes que caen dentro "encienden" la zona; sus tramos son las
+ * calles que se pintan de color como el tráfico de Waze.
+ */
+export interface ZonaCaliente {
+  id: string
+  nombre: string
+  distrito: string
+  /** Vértices [lat, lng] del polígono, en orden. */
+  poligono: [number, number][]
+  /** Polylines [lat, lng][] sobre las calles principales de la zona. */
+  tramos: [number, number][][]
 }

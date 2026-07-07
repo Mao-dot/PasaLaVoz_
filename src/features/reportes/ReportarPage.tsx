@@ -230,13 +230,20 @@ export default function ReportarPage() {
         </section>
 
         {/* Anónimo */}
-        <Tarjeta className="flex items-center justify-between p-3">
-          <div>
-            <p className="text-sm font-bold">Reportar de forma anónima</p>
-            <p className="text-[12px] text-tinta/55">Activado por defecto</p>
-          </div>
-          <Interruptor activo={anonimo} onClick={() => setAnonimo((v) => !v)} />
-        </Tarjeta>
+        <button
+          type="button"
+          onClick={() => setAnonimo((v) => !v)}
+          className="w-full focus:outline-none text-left"
+          aria-pressed={anonimo}
+        >
+          <Tarjeta className="flex items-center justify-between p-3">
+            <div>
+              <p className="text-sm font-bold">Reportar de forma anónima</p>
+              <p className="text-[12px] text-tinta/55">Activado por defecto</p>
+            </div>
+            <Interruptor activo={anonimo} />
+          </Tarjeta>
+        </button>
 
         <Boton variante="primario" bloque disabled={!tipo} onClick={enviar} className="mt-2">
           Enviar reporte
@@ -253,25 +260,24 @@ export default function ReportarPage() {
   )
 }
 
-// Interruptor accesible reutilizable.
-function Interruptor({ activo, onClick }: { activo: boolean; onClick: () => void }) {
+// Interruptor accesible reutilizable (versión flex).
+function Interruptor({ activo }: { activo: boolean }) {
   return (
-    <button
+    <div
       role="switch"
       aria-checked={activo}
-      onClick={onClick}
       className={[
-        'relative h-7 w-12 shrink-0 rounded-full transition-colors',
+        'flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full px-0.5 transition-colors',
         activo ? 'bg-seguro' : 'bg-borde',
       ].join(' ')}
     >
       <span
         className={[
-          'absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform',
-          activo ? 'translate-x-[22px]' : 'translate-x-0.5',
+          'h-6 w-6 rounded-full bg-white shadow transition-transform',
+          activo ? 'translate-x-[20px]' : 'translate-x-0',
         ].join(' ')}
       />
-    </button>
+    </div>
   )
 }
 

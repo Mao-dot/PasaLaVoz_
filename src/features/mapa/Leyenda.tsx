@@ -16,6 +16,8 @@ export default function Leyenda({ total }: { total?: number }) {
         <span className="text-tinta/60">Reporte</span>
         <span className="ml-1.5 h-3 w-3 rounded-full border-2 border-white bg-seguro shadow" />
         <span className="text-tinta/60">Punto seguro</span>
+        <span className="ml-1.5 h-3 w-3 rounded-full border-2 border-white bg-[#2E6BFF] shadow" />
+        <span className="text-tinta/60">Tú</span>
       </div>
     </div>
   )

@@ -5,7 +5,8 @@ import type { Reporte } from './types'
 // representan una ZONA aproximada, nunca un punto exacto.
 //
 // La fecha se calcula relativa a "ahora" para que el texto "hace X" sea creíble
-// cada vez que abres la app.
+// cada vez que abres la app. `confirmaciones` son los vecinos que validaron
+// el reporte ("yo también lo vi"), estilo Waze.
 const ahora = Date.now()
 const horas = (h: number) => new Date(ahora - h * 3600_000).toISOString()
 
@@ -21,6 +22,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Acoso callejero a la salida del parque. Varias personas reportan lo mismo.',
     anonimo: true,
     estado: 'revisado',
+    confirmaciones: 5,
   },
   {
     id: 'r2',
@@ -32,17 +34,19 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Arrebato de celular cerca de una avenida concurrida.',
     anonimo: true,
     estado: 'recibido',
+    confirmaciones: 3,
   },
   {
     id: 'r3',
     tipo: 'zona_oscura',
     distrito: 'Miraflores',
-    lat: -12.118,
-    lng: -77.033,
+    lat: -12.1205,
+    lng: -77.0335,
     fecha: horas(9),
     descripcion: 'Tramo sin alumbrado público desde hace varios días.',
     anonimo: false,
     estado: 'atendido',
+    confirmaciones: 8,
   },
   {
     id: 'r4',
@@ -54,6 +58,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Una persona reportó ser seguida por varias cuadras de noche.',
     anonimo: true,
     estado: 'revisado',
+    confirmaciones: 2,
   },
   {
     id: 'r5',
@@ -65,6 +70,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Comentarios incómodos a transeúntes cerca de un paradero.',
     anonimo: true,
     estado: 'recibido',
+    confirmaciones: 1,
   },
   // — Cercado de Lima —
   {
@@ -77,6 +83,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Zona con varios reportes de robo al paso en horas punta.',
     anonimo: true,
     estado: 'recibido',
+    confirmaciones: 6,
   },
   {
     id: 'r7',
@@ -88,6 +95,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Pelea en la vía pública. Se pidió apoyo a serenazgo.',
     anonimo: true,
     estado: 'atendido',
+    confirmaciones: 4,
   },
   {
     id: 'r8',
@@ -99,6 +107,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Pasaje poco iluminado y solitario por las noches.',
     anonimo: false,
     estado: 'revisado',
+    confirmaciones: 3,
   },
   {
     id: 'r9',
@@ -110,6 +119,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Acoso a estudiantes a la salida de clases.',
     anonimo: true,
     estado: 'recibido',
+    confirmaciones: 2,
   },
   {
     id: 'r10',
@@ -121,6 +131,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Robo de pertenencias en transporte público.',
     anonimo: true,
     estado: 'revisado',
+    confirmaciones: 1,
   },
   // — Barranco —
   {
@@ -133,6 +144,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Acoso callejero en zona de bares durante la noche.',
     anonimo: true,
     estado: 'recibido',
+    confirmaciones: 4,
   },
   {
     id: 'r12',
@@ -144,6 +156,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Persona reportó ser seguida al volver a casa.',
     anonimo: true,
     estado: 'revisado',
+    confirmaciones: 2,
   },
   {
     id: 'r13',
@@ -155,6 +168,7 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Arrebato cerca de un mirador turístico.',
     anonimo: false,
     estado: 'recibido',
+    confirmaciones: 1,
   },
   {
     id: 'r14',
@@ -166,5 +180,6 @@ export const reportesSemilla: Reporte[] = [
     descripcion: 'Calle con luminarias apagadas reportada por vecinos.',
     anonimo: true,
     estado: 'atendido',
+    confirmaciones: 0,
   },
 ]

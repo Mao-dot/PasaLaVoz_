@@ -18,11 +18,13 @@ export default function CapaCalor({ reportes }: { reportes: Reporte[] }) {
     ])
 
     // Degradado amarillo → ámbar → rojo, estilo mapa de tráfico de Waze.
+    // Radio contenido: la mancha debe abrazar las cuadras, no inundarlas
+    // (los polígonos de zona ya marcan el área exacta).
     const capa = L.heatLayer(puntos, {
-      radius: 42,
-      blur: 30,
+      radius: 30,
+      blur: 22,
       maxZoom: 17,
-      minOpacity: 0.3,
+      minOpacity: 0.28,
       gradient: {
         0.15: '#FDE047',
         0.35: '#F59E0B',

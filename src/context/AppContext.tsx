@@ -19,7 +19,11 @@ interface AppState {
 
   // Reportes
   reportes: Reporte[]
-  agregarReporte: (nuevo: Omit<Reporte, 'id' | 'estado'>) => Reporte
+  agregarReporte: (nuevo: Omit<Reporte, 'id' | 'estado' | 'confirmaciones'>) => Reporte
+  /** Validación comunitaria: suma un "yo también lo vi" (una vez por reporte). */
+  confirmarReporte: (id: string) => void
+  /** Ids de reportes que este usuario ya confirmó. */
+  misConfirmaciones: Set<string>
 
   // Contactos de confianza
   contactos: Contacto[]
@@ -41,12 +45,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const crearCuenta = useCallback(() => setModo('cuenta'), [])
 
   const agregarReporte = useCallback(
-    (nuevo: Omit<Reporte, 'id' | 'estado'>) => {
-      const reporte: Reporte = { ...nuevo, id: nuevoId('r'), estado: 'recibido' }
+    (nuevo: Omit<Reporte, 'id' | 'estado' | 'confirmaciones'>) => {
+      const reporte: Reporte = {
+        ...nuevo,
+        id: nuevoId('r'),
+        estado: 'recibido',
+        confirmaciones: 0,
+      }
       setReportes((prev) => [reporte, ...prev])
       return reporte
     },
     [],
+  )
+
+  const [misConfirmaciones, setMisConfirmaciones] = useState<Set<string>>(new Set())
+  const confirmarReporte = useCallback(
+    (id: string) => {
+      if (misConfirmaciones.has(id)) return
+      setMisConfirmaciones((prev) => new Set(prev).add(id))
+      setReportes((prev) =>
+        prev.map((r) =>
+          r.id === id ? { ...r, confirmaciones: r.confirmaciones + 1 } : r,
+        ),
+      )
+    },
+    [misConfirmaciones],
   )
 
   const agregarContacto = useCallback((c: Omit<Contacto, 'id'>) => {
@@ -64,6 +87,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crearCuenta,
       reportes,
       agregarReporte,
+      confirmarReporte,
+      misConfirmaciones,
       contactos,
       agregarContacto,
       eliminarContacto,
@@ -74,6 +99,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crearCuenta,
       reportes,
       agregarReporte,
+      confirmarReporte,
+      misConfirmaciones,
       contactos,
       agregarContacto,
       eliminarContacto,

@@ -14,15 +14,20 @@ import {
   Layers,
   LocateFixed,
   Flame,
+  Navigation,
+  Eye,
+  Check,
+  Users,
 } from 'lucide-react'
-import MapaView from './MapaView'
+import MapaView, { type RutaSegura, type ZonaConReportes } from './MapaView'
 import Leyenda from './Leyenda'
 import Chip from '../../components/Chip'
 import BottomSheet from '../../components/BottomSheet'
 import Boton from '../../components/Boton'
 import { useApp } from '../../context/AppContext'
 import { puntosSeguros } from '../../data/puntosSeguros'
-import { distritos, CENTRO_LIMA, ZOOM_INICIAL } from '../../data/distritos'
+import { zonasCalientes } from '../../data/zonas'
+import { distritos, CENTRO_LIMA, MI_UBICACION, ZOOM_INICIAL } from '../../data/distritos'
 import type { Distrito, PuntoSeguro, Reporte, TipoIncidente } from '../../data/types'
 import {
   META_INCIDENTE,
@@ -30,6 +35,13 @@ import {
   TIPOS_INCIDENTE,
   colorPorIntensidad,
 } from '../../lib/incidentes'
+import {
+  distanciaMetros,
+  longitudRuta,
+  minutosCaminando,
+  puntoEnPoligono,
+  rutaAproximada,
+} from '../../lib/geo'
 import { tiempoRelativo } from '../../lib/format'
 
 // Chips de filtro visibles (los 5 tipos principales del prompt).
@@ -56,7 +68,9 @@ export default function MapaPage() {
   const [activos, setActivos] = useState<Set<TipoIncidente>>(
     () => new Set(TIPOS_INCIDENTE),
   )
-  const [seleccion, setSeleccion] = useState<Reporte | null>(null)
+  const [seleccionReporte, setSeleccionReporte] = useState<Reporte | null>(null)
+  const [seleccionZona, setSeleccionZona] = useState<ZonaConReportes | null>(null)
+  const [ruta, setRuta] = useState<RutaSegura | null>(null)
   const [buscando, setBuscando] = useState(false)
   const [consulta, setConsulta] = useState('')
   const [capasAbierto, setCapasAbierto] = useState(false)
@@ -74,6 +88,43 @@ export default function MapaPage() {
           (distritoNombre === null || r.distrito === distritoNombre),
       ),
     [reportes, activos, distritoNombre],
+  )
+
+  // Asigna cada reporte filtrado a la zona caliente que lo contiene.
+  // Solo se pintan zonas "encendidas" (con al menos un reporte visible).
+  const zonasConReportes = useMemo<ZonaConReportes[]>(
+    () =>
+      zonasCalientes
+        .map((zona) => {
+          const rs = reportesFiltrados.filter((r) =>
+            puntoEnPoligono([r.lat, r.lng], zona.poligono),
+          )
+          return {
+            zona,
+            reportes: rs,
+            intensidad: rs.reduce((m, r) => Math.max(m, META_INCIDENTE[r.tipo].peso), 0),
+          }
+        })
+        .filter((z) => z.reportes.length > 0),
+    [reportesFiltrados],
+  )
+
+  // Conteo por distrito para las burbujas de la vista lejana.
+  const conteoPorDistrito = useMemo(
+    () =>
+      distritos
+        .map((d) => {
+          const rs = reportesFiltrados.filter((r) => r.distrito === d.nombre)
+          return {
+            distrito: d,
+            n: rs.length,
+            color: colorPorIntensidad(
+              rs.reduce((m, r) => Math.max(m, META_INCIDENTE[r.tipo].peso), 0),
+            ),
+          }
+        })
+        .filter((x) => x.n > 0),
+    [reportesFiltrados],
   )
 
   const toggleFiltro = (t: TipoIncidente) => {
@@ -119,26 +170,69 @@ export default function MapaPage() {
     cerrarBusqueda()
   }
 
-  const recentrar = () => {
-    const d = distritos.find((x) => x.id === distritoId)
-    setVista(
-      d
-        ? { centro: [d.lat, d.lng], zoom: 15 }
-        : { centro: CENTRO_LIMA, zoom: ZOOM_INICIAL },
-    )
+  // El botón de localizar te lleva a TU ubicación (simulada), como en Waze.
+  const irAMiUbicacion = () => {
+    setVista({ centro: MI_UBICACION, zoom: 16 })
   }
+
+  // Burbuja de distrito (vista lejana) → acercarse a ese distrito.
+  const acercarDistrito = (d: Distrito) => {
+    setVista({ centro: [d.lat, d.lng], zoom: 15 })
+  }
+
+  const cerrarSheet = () => {
+    setSeleccionReporte(null)
+    setSeleccionZona(null)
+  }
+
+  // Ruta segura: al punto seguro más cercano a tu ubicación simulada.
+  const activarRutaSegura = () => {
+    let destino: PuntoSeguro | null = null
+    let mejor = Infinity
+    for (const p of puntosSeguros) {
+      const d = distanciaMetros(MI_UBICACION, [p.lat, p.lng])
+      if (d < mejor) {
+        mejor = d
+        destino = p
+      }
+    }
+    if (!destino) return
+    const puntos = rutaAproximada(MI_UBICACION, [destino.lat, destino.lng])
+    const metros = Math.round(longitudRuta(puntos))
+    setRuta({ destino, puntos, metros, minutos: minutosCaminando(metros) })
+    setVerSeguros(true)
+    cerrarSheet()
+    setVista({
+      centro: [
+        (MI_UBICACION[0] + destino.lat) / 2,
+        (MI_UBICACION[1] + destino.lng) / 2,
+      ],
+      zoom: 16,
+    })
+  }
+
+  // La zona seleccionada puede quedar desactualizada tras confirmar un
+  // reporte: se busca la versión viva en cada render.
+  const zonaViva = seleccionZona
+    ? zonasConReportes.find((z) => z.zona.id === seleccionZona.zona.id) ?? seleccionZona
+    : null
 
   return (
     <div className="relative h-full w-full">
       {/* Mapa a pantalla completa */}
       <MapaView
         reportes={reportesFiltrados}
-        puntosSeguros={verSeguros ? puntosSeguros : []}
+        zonas={zonasConReportes}
+        conteoPorDistrito={conteoPorDistrito}
+        puntosSeguros={puntosSeguros}
         verRiesgo={verRiesgo}
         verSeguros={verSeguros}
         centro={vista.centro}
         zoom={vista.zoom}
-        onSeleccionarZona={setSeleccion}
+        ruta={ruta}
+        onSeleccionarReporte={setSeleccionReporte}
+        onSeleccionarZona={setSeleccionZona}
+        onAcercarDistrito={acercarDistrito}
       />
 
       {/* ── Barra superior estilo Waze: píldora de búsqueda + chips ── */}
@@ -194,7 +288,7 @@ export default function MapaPage() {
         </div>
       </div>
 
-      {/* ── Botones flotantes (capas + recentrar) ── */}
+      {/* ── Botones flotantes (capas + mi ubicación) ── */}
       <div className="absolute bottom-20 right-3 z-[1000] flex flex-col gap-2">
         <FabMapa
           aria-label="Capas del mapa"
@@ -203,7 +297,7 @@ export default function MapaPage() {
         >
           <Layers size={20} />
         </FabMapa>
-        <FabMapa aria-label="Recentrar mapa" onClick={recentrar}>
+        <FabMapa aria-label="Ir a mi ubicación" onClick={irAMiUbicacion}>
           <LocateFixed size={20} />
         </FabMapa>
       </div>
@@ -224,7 +318,7 @@ export default function MapaPage() {
               Icono={Flame}
               colorIcono="text-riesgo-medio"
               label="Zonas de riesgo"
-              descripcion="Calor + reportes"
+              descripcion="Calor + zonas + reportes"
               activo={verRiesgo}
               onToggle={() => setVerRiesgo((v) => !v)}
             />
@@ -232,7 +326,7 @@ export default function MapaPage() {
               Icono={ShieldCheck}
               colorIcono="text-seguro"
               label="Puntos seguros"
-              descripcion="Comisarías, farmacias…"
+              descripcion="Comisarías, hospitales…"
               activo={verSeguros}
               onToggle={() => setVerSeguros((v) => !v)}
             />
@@ -240,7 +334,32 @@ export default function MapaPage() {
         </>
       )}
 
-      <Leyenda total={reportesFiltrados.length} />
+      {/* Banner de ruta segura activa (reemplaza a la leyenda mientras dura). */}
+      {ruta ? (
+        <div className="pop-in absolute bottom-3 left-3 right-3 z-[1010] flex items-center gap-3 rounded-2xl bg-white px-3 py-2.5 shadow-marco">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-seguro-suave text-seguro">
+            <Navigation size={19} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13.5px] font-bold leading-tight">
+              Ruta segura: {ruta.destino.nombre}
+            </p>
+            <p className="text-[12px] text-tinta/55">
+              {META_PUNTO_SEGURO[ruta.destino.tipo].label} · {ruta.metros} m · ~
+              {ruta.minutos} min a pie
+            </p>
+          </div>
+          <button
+            onClick={() => setRuta(null)}
+            aria-label="Quitar ruta segura"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fondo text-tinta/50 hover:bg-borde"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      ) : (
+        <Leyenda total={reportesFiltrados.length} />
+      )}
 
       {/* ── Panel de búsqueda a pantalla completa (estilo Waze) ── */}
       {buscando && (
@@ -342,13 +461,34 @@ export default function MapaPage() {
         </div>
       )}
 
-      {/* Bottom sheet de una zona */}
+      {/* Bottom sheet: detalle de un reporte o de una zona caliente */}
       <BottomSheet
-        abierto={seleccion !== null}
-        onCerrar={() => setSeleccion(null)}
-        titulo={seleccion ? META_INCIDENTE[seleccion.tipo].label : undefined}
+        abierto={seleccionReporte !== null || zonaViva !== null}
+        onCerrar={cerrarSheet}
+        titulo={
+          seleccionReporte
+            ? META_INCIDENTE[seleccionReporte.tipo].label
+            : zonaViva?.zona.nombre
+        }
       >
-        {seleccion && <DetalleZona reporte={seleccion} onReportar={() => navigate('/reportar')} />}
+        {seleccionReporte ? (
+          <DetalleReporte
+            reporteId={seleccionReporte.id}
+            fallback={seleccionReporte}
+            onReportar={() => navigate('/reportar')}
+            onRutaSegura={activarRutaSegura}
+          />
+        ) : zonaViva ? (
+          <DetalleZonaCaliente
+            zona={zonaViva}
+            onVerReporte={(r) => {
+              setSeleccionZona(null)
+              setSeleccionReporte(r)
+            }}
+            onReportar={() => navigate('/reportar')}
+            onRutaSegura={activarRutaSegura}
+          />
+        ) : null}
       </BottomSheet>
     </div>
   )
@@ -446,13 +586,23 @@ function FilaResultado({
   )
 }
 
-function DetalleZona({
-  reporte,
+// Detalle de un reporte individual, con validación comunitaria.
+function DetalleReporte({
+  reporteId,
+  fallback,
   onReportar,
+  onRutaSegura,
 }: {
-  reporte: Reporte
+  reporteId: string
+  fallback: Reporte
   onReportar: () => void
+  onRutaSegura: () => void
 }) {
+  const { reportes, confirmarReporte, misConfirmaciones } = useApp()
+  // Versión viva del reporte (las confirmaciones cambian en el contexto).
+  const reporte = reportes.find((r) => r.id === reporteId) ?? fallback
+  const yaConfirme = misConfirmaciones.has(reporte.id)
+
   const meta = META_INCIDENTE[reporte.tipo]
   const colorNivel =
     meta.nivel === 'Alto'
@@ -491,9 +641,127 @@ function DetalleZona({
         </p>
       )}
 
-      <Boton variante="primario" bloque onClick={onReportar}>
-        Reportar aquí <ChevronRight size={18} />
-      </Boton>
+      {/* Validación comunitaria estilo Waze: "sigue pasando" */}
+      <div className="flex items-center gap-2.5 rounded-xl border border-borde px-3 py-2.5">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-marca-suave text-marca">
+          <Users size={17} />
+        </span>
+        <p className="min-w-0 flex-1 text-[13px] leading-snug text-tinta/75">
+          <b className="text-tinta">{reporte.confirmaciones}</b>{' '}
+          {reporte.confirmaciones === 1 ? 'vecino confirmó' : 'vecinos confirmaron'} esta
+          zona
+        </p>
+        <button
+          onClick={() => confirmarReporte(reporte.id)}
+          disabled={yaConfirme}
+          className={[
+            'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[12.5px] font-bold transition-colors',
+            yaConfirme
+              ? 'bg-seguro-suave text-seguro'
+              : 'bg-marca text-white active:bg-marca-oscuro',
+          ].join(' ')}
+        >
+          {yaConfirme ? (
+            <>
+              <Check size={14} /> Confirmado
+            </>
+          ) : (
+            <>
+              <Eye size={14} /> Lo vi también
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Boton variante="exito" bloque onClick={onRutaSegura} className="text-[14px]">
+          <Navigation size={17} /> Ruta segura
+        </Boton>
+        <Boton variante="primario" bloque onClick={onReportar} className="text-[14px]">
+          Reportar aquí
+        </Boton>
+      </div>
+    </div>
+  )
+}
+
+// Detalle de una zona caliente: resumen + lista de sus reportes.
+function DetalleZonaCaliente({
+  zona,
+  onVerReporte,
+  onReportar,
+  onRutaSegura,
+}: {
+  zona: ZonaConReportes
+  onVerReporte: (r: Reporte) => void
+  onReportar: () => void
+  onRutaSegura: () => void
+}) {
+  const color = colorPorIntensidad(zona.intensidad)
+  const nivel =
+    zona.intensidad >= 0.75 ? 'alto' : zona.intensidad >= 0.55 ? 'medio' : 'bajo'
+  const totalConfirmaciones = zona.reportes.reduce((s, r) => s + r.confirmaciones, 0)
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-full bg-fondo px-3 py-1 text-[13px] text-tinta/60">
+          <MapPin size={14} /> {zona.zona.distrito}
+        </span>
+        <span
+          className="rounded-full px-3 py-1 text-[13px] font-semibold text-white"
+          style={{ backgroundColor: color }}
+        >
+          Riesgo {nivel}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-fondo px-3 py-1 text-[13px] text-tinta/60">
+          <Users size={14} /> {totalConfirmaciones} confirmaciones
+        </span>
+      </div>
+
+      <p className="text-[13px] text-tinta/60">
+        {zona.reportes.length}{' '}
+        {zona.reportes.length === 1 ? 'reporte activo' : 'reportes activos'} en esta zona.
+        El área sigue las calles del sector, no ubicaciones exactas.
+      </p>
+
+      <div className="space-y-1.5">
+        {zona.reportes.map((r) => {
+          const meta = META_INCIDENTE[r.tipo]
+          const c = colorPorIntensidad(meta.peso)
+          return (
+            <button
+              key={r.id}
+              onClick={() => onVerReporte(r)}
+              className="flex w-full items-center gap-3 rounded-xl border border-borde px-3 py-2.5 text-left active:bg-fondo"
+            >
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-white"
+                style={{ backgroundColor: c }}
+              >
+                <meta.Icono size={16} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{meta.label}</span>
+                <span className="block text-[12px] text-tinta/50">
+                  {tiempoRelativo(r.fecha)} · {r.confirmaciones}{' '}
+                  {r.confirmaciones === 1 ? 'confirmación' : 'confirmaciones'}
+                </span>
+              </span>
+              <ChevronRight size={16} className="shrink-0 text-tinta/25" />
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Boton variante="exito" bloque onClick={onRutaSegura} className="text-[14px]">
+          <Navigation size={17} /> Ruta segura
+        </Boton>
+        <Boton variante="primario" bloque onClick={onReportar} className="text-[14px]">
+          Reportar aquí
+        </Boton>
+      </div>
     </div>
   )
 }

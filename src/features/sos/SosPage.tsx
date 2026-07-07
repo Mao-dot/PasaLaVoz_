@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import {
   Siren,
   Phone,
@@ -11,15 +12,16 @@ import {
   ShieldCheck,
   MessageCircle,
   CheckCircle2,
+  ChevronDown,
 } from 'lucide-react'
 import EncabezadoPagina from '../../components/EncabezadoPagina'
 import Boton from '../../components/Boton'
 import Tarjeta from '../../components/Tarjeta'
 import { useApp } from '../../context/AppContext'
 import { AVISO_PROTOTIPO } from '../../lib/numeros'
-import { CENTRO_LIMA } from '../../data/distritos'
+import { MI_UBICACION } from '../../data/distritos'
 
-type Estado = 'idle' | 'confirmando' | 'enviada'
+type Estado = 'idle' | 'enviada'
 
 // Vibración háptica si el dispositivo la soporta (móviles).
 function vibrar(patron: number | number[]) {
@@ -48,8 +50,8 @@ export default function SosPage() {
         ) : (
           <BotonSos
             onActivar={() => {
-              vibrar([120, 60, 120])
-              setEstado('confirmando')
+              vibrar([200, 80, 200])
+              setEstado('enviada')
             }}
           />
         )}
@@ -61,50 +63,114 @@ export default function SosPage() {
           {AVISO_PROTOTIPO}
         </div>
       </div>
-
-      {estado === 'confirmando' && (
-        <ModalCuentaRegresiva
-          onCancelar={() => setEstado('idle')}
-          onConfirmar={() => {
-            vibrar([200, 80, 200])
-            setEstado('enviada')
-          }}
-        />
-      )}
     </div>
   )
 }
 
-/* ---------- Botón de mantener presionado 3 s ---------- */
+/* ---------- Botón mantener-y-soltar (mecánica tipo nota de voz) ----------
+ * 1. Presiona y mantén: la alerta se ARMA (anillo de progreso, ~1.5 s).
+ * 2. Armada: al SOLTAR se envía de inmediato.
+ * 3. ¿Te arrepentiste? Sin soltar, desliza el dedo hacia abajo hasta la
+ *    zona CANCELAR y suelta ahí: no se envía nada.
+ */
+type Fase = 'reposo' | 'cargando' | 'armado'
+type Aviso = 'corto' | 'cancelado' | null
+
 function BotonSos({ onActivar }: { onActivar: () => void }) {
+  const [fase, setFase] = useState<Fase>('reposo')
   const [progreso, setProgreso] = useState(0)
+  const [sobreCancelar, setSobreCancelar] = useState(false)
+  const [aviso, setAviso] = useState<Aviso>(null)
   const inicio = useRef<number | null>(null)
   const raf = useRef<number>()
-  const DURACION = 3000
+  const armadoTimeout = useRef<number>()
+  const cancelarRef = useRef<HTMLDivElement>(null)
+  const ARMADO_MS = 1500
 
   const reset = () => {
     inicio.current = null
     if (raf.current) cancelAnimationFrame(raf.current)
+    if (armadoTimeout.current) clearTimeout(armadoTimeout.current)
     setProgreso(0)
+    setFase('reposo')
+    setSobreCancelar(false)
   }
 
+  // El anillo se anima con rAF, pero el ARMADO usa un timeout aparte:
+  // si el navegador recorta frames, el gesto sigue siendo puntual.
   const tick = (t: number) => {
     if (inicio.current == null) return
-    const p = Math.min(100, ((t - inicio.current) / DURACION) * 100)
+    const p = Math.min(100, ((t - inicio.current) / ARMADO_MS) * 100)
     setProgreso(p)
-    if (p >= 100) {
-      reset()
-      onActivar()
-      return
-    }
-    raf.current = requestAnimationFrame(tick)
+    if (p < 100) raf.current = requestAnimationFrame(tick)
   }
 
-  const iniciar = () => {
+  const alPresionar = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    // Captura el puntero: seguimos recibiendo move/up aunque el dedo
+    // salga del botón (necesario para deslizar hasta CANCELAR).
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      /* toque implícitamente capturado o puntero sintético: continuar */
+    }
+    setAviso(null)
     vibrar(30)
+    setFase('cargando')
     inicio.current = performance.now()
     raf.current = requestAnimationFrame(tick)
+    armadoTimeout.current = window.setTimeout(() => {
+      // Alerta armada: desde aquí, soltar = enviar.
+      setFase('armado')
+      vibrar([70, 50, 110])
+    }, ARMADO_MS)
   }
+
+  const alMover = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (fase === 'reposo') return
+    const rect = cancelarRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const margen = 14
+    const dentro =
+      e.clientX >= rect.left - margen &&
+      e.clientX <= rect.right + margen &&
+      e.clientY >= rect.top - margen &&
+      e.clientY <= rect.bottom + margen
+    if (dentro !== sobreCancelar) {
+      setSobreCancelar(dentro)
+      if (dentro) vibrar(20)
+    }
+  }
+
+  const alSoltar = () => {
+    if (fase === 'armado') {
+      if (sobreCancelar) {
+        reset()
+        setAviso('cancelado')
+        vibrar(50)
+      } else {
+        reset()
+        onActivar()
+      }
+    } else if (fase === 'cargando') {
+      reset()
+      setAviso('corto')
+    }
+  }
+
+  // Interrupción del sistema (llamada, gesto del SO): jamás enviar por error.
+  const alInterrumpir = () => {
+    if (fase !== 'reposo') {
+      reset()
+      setAviso('cancelado')
+    }
+  }
+
+  // Los avisos se limpian solos a los pocos segundos.
+  useEffect(() => {
+    if (!aviso) return
+    const id = setTimeout(() => setAviso(null), 3500)
+    return () => clearTimeout(id)
+  }, [aviso])
 
   useEffect(() => () => reset(), [])
 
@@ -112,12 +178,27 @@ function BotonSos({ onActivar }: { onActivar: () => void }) {
   const R = 92
   const C = 2 * Math.PI * R
   const offset = C * (1 - progreso / 100)
-  const presionando = progreso > 0
+  const presionando = fase !== 'reposo'
+
+  const instruccion =
+    fase === 'reposo' ? (
+      <>
+        Mantén presionado para armar. <span className="text-sos">Al soltar se envía.</span>
+      </>
+    ) : fase === 'cargando' ? (
+      <>Armando la alerta… no sueltes</>
+    ) : sobreCancelar ? (
+      <span className="text-tinta">Suelta para cancelar</span>
+    ) : (
+      <>
+        <span className="text-sos">Suelta para ENVIAR</span> · desliza abajo para cancelar
+      </>
+    )
 
   return (
     <Tarjeta className="flex flex-col items-center px-4 py-6">
-      <p className="mb-5 text-center text-[15px] font-semibold text-tinta/70">
-        Mantén presionado <span className="text-sos">3 segundos</span> para activar el SOS
+      <p className="mb-5 min-h-[22px] text-center text-[15px] font-semibold text-tinta/70">
+        {instruccion}
       </p>
 
       <div className="relative">
@@ -126,17 +207,20 @@ function BotonSos({ onActivar }: { onActivar: () => void }) {
         <span className="sos-anillo sos-anillo-2" aria-hidden />
 
         <button
-          onPointerDown={iniciar}
-          onPointerUp={reset}
-          onPointerLeave={reset}
-          onPointerCancel={reset}
+          onPointerDown={alPresionar}
+          onPointerMove={alMover}
+          onPointerUp={alSoltar}
+          onPointerCancel={alInterrumpir}
           onContextMenu={(e) => e.preventDefault()}
-          aria-label="Mantén presionado 3 segundos para activar SOS"
+          aria-label="Mantén presionado; al soltar se envía la alerta. Desliza hacia abajo para cancelar."
           className={[
             'relative grid h-56 w-56 select-none place-items-center rounded-full text-white',
             'bg-gradient-to-b from-sos to-sos-oscuro shadow-marco touch-none',
             'transition-transform',
+            aviso === 'corto' ? 'sacudida' : '',
+            fase === 'armado' && !sobreCancelar ? 'sos-armado' : '',
             presionando ? 'scale-95' : 'active:scale-95',
+            sobreCancelar ? 'opacity-70 saturate-50' : '',
           ].join(' ')}
         >
           <svg className="pointer-events-none absolute inset-0 -rotate-90" viewBox="0 0 200 200">
@@ -150,90 +234,59 @@ function BotonSos({ onActivar }: { onActivar: () => void }) {
               strokeWidth="8"
               strokeLinecap="round"
               strokeDasharray={C}
-              strokeDashoffset={offset}
+              strokeDashoffset={fase === 'armado' ? 0 : offset}
             />
           </svg>
-          <div className="flex flex-col items-center">
+          <div className="pointer-events-none flex flex-col items-center">
             <Siren size={52} />
             <span className="mt-1 text-2xl font-extrabold tracking-wide">SOS</span>
             <span className="text-[12px] text-white/85">
-              {presionando
-                ? `Sigue presionando… ${Math.ceil(3 - (progreso / 100) * 3)}s`
-                : 'Presiona y mantén'}
+              {fase === 'reposo' && 'Presiona y mantén'}
+              {fase === 'cargando' && 'Armando…'}
+              {fase === 'armado' && (sobreCancelar ? 'Cancelando…' : 'Suelta para enviar')}
             </span>
           </div>
         </button>
       </div>
 
-      <p className="mt-5 flex items-center gap-1.5 text-center text-[12px] text-tinta/50">
-        <ShieldCheck size={14} className="shrink-0 text-seguro" />
-        Al activarlo se avisa a tus contactos con tu zona aproximada.
+      {/* Zona de cancelar: objetivo del gesto "desliza hacia abajo". */}
+      <div
+        ref={cancelarRef}
+        aria-hidden={!presionando}
+        className={[
+          'mt-6 flex h-14 w-full max-w-[250px] items-center justify-center gap-2 rounded-2xl border-2 text-[13.5px] font-bold transition-all duration-200',
+          presionando ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2',
+          sobreCancelar
+            ? 'scale-105 border-solid border-sos bg-sos-suave text-sos'
+            : 'border-dashed border-borde bg-fondo/60 text-tinta/45',
+        ].join(' ')}
+      >
+        <ChevronDown size={18} />
+        {sobreCancelar ? 'Suelta para cancelar' : 'Desliza aquí para cancelar'}
+      </div>
+
+      <p
+        className={[
+          'mt-4 flex min-h-[20px] items-center gap-1.5 text-center text-[12px]',
+          aviso === 'corto' ? 'font-semibold text-amber-600' : '',
+          aviso === 'cancelado' ? 'font-semibold text-seguro' : 'text-tinta/50',
+        ].join(' ')}
+      >
+        {aviso === 'corto' ? (
+          <>Se soltó muy pronto. Mantén presionado hasta que se arme.</>
+        ) : aviso === 'cancelado' ? (
+          <>
+            <ShieldCheck size={14} className="shrink-0" /> Alerta cancelada. No se envió
+            nada.
+          </>
+        ) : (
+          <>
+            <ShieldCheck size={14} className="shrink-0 text-seguro" />
+            Al enviarla se avisa a tus contactos con tu zona aproximada.
+          </>
+        )}
       </p>
     </Tarjeta>
-  )
-}
-
-/* ---------- Modal con cuenta regresiva de 5 s ---------- */
-function ModalCuentaRegresiva({
-  onCancelar,
-  onConfirmar,
-}: {
-  onCancelar: () => void
-  onConfirmar: () => void
-}) {
-  const TOTAL = 5
-  const [seg, setSeg] = useState(TOTAL)
-
-  useEffect(() => {
-    if (seg <= 0) {
-      onConfirmar()
-      return
-    }
-    vibrar(45)
-    const id = setTimeout(() => setSeg((s) => s - 1), 1000)
-    return () => clearTimeout(id)
-  }, [seg, onConfirmar])
-
-  // Anillo de cuenta regresiva
-  const R = 54
-  const C = 2 * Math.PI * R
-
-  return (
-    <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-      <div className="pop-in w-full max-w-xs rounded-3xl bg-white p-6 text-center shadow-marco">
-        <div className="relative mx-auto grid h-32 w-32 place-items-center">
-          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r={R} fill="none" stroke="#FDECEC" strokeWidth="8" />
-            <circle
-              cx="60"
-              cy="60"
-              r={R}
-              fill="none"
-              stroke="#E23B3B"
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray={C}
-              strokeDashoffset={C * (1 - seg / TOTAL)}
-              style={{ transition: 'stroke-dashoffset 1s linear' }}
-            />
-          </svg>
-          <span className="text-5xl font-extrabold tabular-nums text-sos">{seg}</span>
-        </div>
-
-        <h2 className="mt-4 text-xl font-extrabold">¿Activar alerta de emergencia?</h2>
-        <p className="mt-1 text-[13.5px] text-tinta/60">
-          Se enviará automáticamente a tus contactos. Aún puedes cancelar.
-        </p>
-        <div className="mt-5 grid gap-2">
-          <Boton variante="secundario" bloque onClick={onCancelar} className="min-h-[54px] text-base">
-            Cancelar
-          </Boton>
-          <Boton variante="sos" bloque onClick={onConfirmar}>
-            Enviar ahora
-          </Boton>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -250,8 +303,8 @@ function AlertaEnviada({ onReiniciar }: { onReiniciar: () => void }) {
   const mm = String(Math.floor(transcurrido / 60)).padStart(2, '0')
   const ss = String(transcurrido % 60).padStart(2, '0')
 
-  // Enlace de WhatsApp con ubicación aproximada (mock: centro de Lima).
-  const [lat, lng] = CENTRO_LIMA
+  // Enlace de WhatsApp con la zona aproximada del usuario (simulada).
+  const [lat, lng] = MI_UBICACION
   const textoSos = encodeURIComponent(
     `🚨 SOS — Necesito ayuda. Mi zona aproximada: https://maps.google.com/?q=${lat},${lng} (enviado con PasaLaVoz, prototipo)`,
   )

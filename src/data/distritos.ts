@@ -9,5 +9,12 @@ export const distritos: Distrito[] = [
   { id: 'la_victoria', nombre: 'La Victoria', lat: -12.0676, lng: -77.0159 },
 ]
 
-export const CENTRO_LIMA: [number, number] = [-12.1, -77.035]
-export const ZOOM_INICIAL = 13
+// Centro y zoom de arranque calibrados para que los 3 focos (Cercado,
+// Miraflores, Barranco) y sus burbujas entren completos en la pantalla.
+export const CENTRO_LIMA: [number, number] = [-12.097, -77.034]
+export const ZOOM_INICIAL = 12.5
+
+// Ubicación simulada del usuario (zona de Schell, al sureste de Kennedy).
+// El prototipo no usa GPS real: este punto alimenta el "estás aquí",
+// el recentrado del mapa y la ruta segura.
+export const MI_UBICACION: [number, number] = [-12.1258, -77.0272]
