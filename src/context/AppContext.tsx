@@ -20,6 +20,7 @@ interface AppState {
   // Reportes
   reportes: Reporte[]
   agregarReporte: (nuevo: Omit<Reporte, 'id' | 'estado' | 'confirmaciones'>) => Reporte
+  eliminarReporte: (id: string) => void
   /** Validación comunitaria: suma un "yo también lo vi" (una vez por reporte). */
   confirmarReporte: (id: string) => void
   /** Ids de reportes que este usuario ya confirmó. */
@@ -37,6 +38,9 @@ let _id = 1000
 const nuevoId = (prefijo: string) => `${prefijo}${++_id}`
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const eliminarReporte = useCallback((id: string) => {
+  setReportes((prev) => prev.filter((reporte) => reporte.id !== id))
+  }, [])
   const [modo, setModo] = useState<'anonimo' | 'cuenta'>('anonimo')
   const [reportes, setReportes] = useState<Reporte[]>(reportesSemilla)
   const [contactos, setContactos] = useState<Contacto[]>(contactosSemilla)
@@ -92,6 +96,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       contactos,
       agregarContacto,
       eliminarContacto,
+      eliminarReporte,
     }),
     [
       modo,
