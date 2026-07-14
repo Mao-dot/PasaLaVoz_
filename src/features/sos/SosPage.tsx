@@ -20,8 +20,11 @@ import Tarjeta from '../../components/Tarjeta'
 import { useApp } from '../../context/AppContext'
 import { AVISO_PROTOTIPO } from '../../lib/numeros'
 import { MI_UBICACION } from '../../data/distritos'
+import { useGeolocation, type Coordenadas } from './useGeolocation'
+import Countdown from './Countdown'
+import EmergencyInfo from './EmergencyInfo'
 
-type Estado = 'idle' | 'enviada'
+type Estado = 'idle' | 'contando' | 'enviada'
 
 // Vibración háptica si el dispositivo la soporta (móviles).
 function vibrar(patron: number | number[]) {
@@ -34,27 +37,56 @@ function vibrar(patron: number | number[]) {
 
 export default function SosPage() {
   const [estado, setEstado] = useState<Estado>('idle')
+  // Transición suave: al cambiar de pantalla (idle/contando/enviada) se
+  // aplica una breve animación de salida antes de montar la siguiente.
+  const [saliendo, setSaliendo] = useState(false)
+  const { coords, error: errorUbicacion, solicitarUbicacion } = useGeolocation()
+
+  const cambiarEstado = (siguiente: Estado) => {
+    setSaliendo(true)
+    window.setTimeout(() => {
+      setEstado(siguiente)
+      setSaliendo(false)
+    }, 200)
+  }
 
   return (
     <div className="pb-8">
       <EncabezadoPagina titulo="SOS" subtitulo="Emergencia y contactos de confianza" />
 
       <div className="space-y-5 p-4">
-        {estado === 'enviada' ? (
-          <AlertaEnviada
-            onReiniciar={() => {
-              vibrar(80)
-              setEstado('idle')
-            }}
-          />
-        ) : (
-          <BotonSos
-            onActivar={() => {
-              vibrar([200, 80, 200])
-              setEstado('enviada')
-            }}
-          />
-        )}
+        <div key={estado} className={saliendo ? 'vista-saliendo' : 'vista-entrando'}>
+          {estado === 'enviada' ? (
+            <AlertaEnviada
+              coords={coords}
+              errorUbicacion={errorUbicacion}
+              onReiniciar={() => {
+                vibrar(80)
+                cambiarEstado('idle')
+              }}
+            />
+          ) : estado === 'contando' ? (
+            <Countdown
+              onFinalizar={() => {
+                vibrar([200, 80, 200])
+                cambiarEstado('enviada')
+              }}
+              onCancelar={() => {
+                vibrar(50)
+                cambiarEstado('idle')
+              }}
+            />
+          ) : (
+            <BotonSos
+              onActivar={() => {
+                // Se dispara la búsqueda de ubicación real en paralelo a la
+                // cuenta regresiva, para tenerla lista al enviar la alerta.
+                solicitarUbicacion()
+                cambiarEstado('contando')
+              }}
+            />
+          )}
+        </div>
 
         <ContactosConfianza />
 
@@ -290,8 +322,16 @@ function BotonSos({ onActivar }: { onActivar: () => void }) {
   )
 }
 
-/* ---------- Estado: alerta enviada (simulada) ---------- */
-function AlertaEnviada({ onReiniciar }: { onReiniciar: () => void }) {
+/* ---------- Estado: alerta enviada ---------- */
+function AlertaEnviada({
+  coords,
+  errorUbicacion,
+  onReiniciar,
+}: {
+  coords: Coordenadas | null
+  errorUbicacion: string | null
+  onReiniciar: () => void
+}) {
   const { contactos } = useApp()
 
   // Cronómetro de tiempo compartiendo ubicación.
@@ -303,8 +343,11 @@ function AlertaEnviada({ onReiniciar }: { onReiniciar: () => void }) {
   const mm = String(Math.floor(transcurrido / 60)).padStart(2, '0')
   const ss = String(transcurrido % 60).padStart(2, '0')
 
-  // Enlace de WhatsApp con la zona aproximada del usuario (simulada).
-  const [lat, lng] = MI_UBICACION
+  // Enlace de WhatsApp: usa la ubicación real si el usuario la concedió;
+  // si no, cae en la zona simulada para no romper el flujo existente.
+  const [latSimulada, lngSimulada] = MI_UBICACION
+  const lat = coords?.lat ?? latSimulada
+  const lng = coords?.lng ?? lngSimulada
   const textoSos = encodeURIComponent(
     `🚨 SOS — Necesito ayuda. Mi zona aproximada: https://maps.google.com/?q=${lat},${lng} (enviado con PasaLaVoz, prototipo)`,
   )
@@ -324,6 +367,8 @@ function AlertaEnviada({ onReiniciar }: { onReiniciar: () => void }) {
       </div>
 
       <div className="space-y-2 p-4">
+        <EmergencyInfo coords={coords} errorUbicacion={errorUbicacion} />
+
         {contactos.length === 0 && (
           <p className="rounded-xl bg-fondo px-3 py-3 text-center text-[13px] text-tinta/55">
             No tienes contactos de confianza aún. Agrégalos más abajo.
