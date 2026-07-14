@@ -21,22 +21,29 @@ import type {
   ZonaCaliente,
 } from '../../data/types'
 import { CENTRO_LIMA, MI_UBICACION, ZOOM_INICIAL } from '../../data/distritos'
-import { META_INCIDENTE, META_PUNTO_SEGURO, colorPorIntensidad } from '../../lib/incidentes'
+import { META_INCIDENTE, META_PUNTO_SEGURO } from '../../lib/incidentes'
 import CapaCalor from './CapaCalor'
 
-/** Zoom a partir del cual aparecen los pines individuales (estilo Waze:
- * de lejos solo manchas y burbujas; de cerca, el detalle). */
+/** Zoom a partir del cual aparecen los pines individuales (estilo Waze). */
 const ZOOM_PINES = 14
 
-/** Zona caliente con sus reportes ya asignados (lo calcula MapaPage). */
+// ─── Mapa Único de Colores por Incidente ───
+// Esto garantiza que el ícono y su área correspondiente tengan el mismo color
+const COLORES_INCIDENTE: Record<TipoIncidente, string> = {
+  acoso: '#F97316',       // Naranja
+  robo: '#DC2626',        // Rojo
+  persecucion: '#4F46E5', // Azul/Índigo
+  violencia: '#C026D3',   // Magenta
+  zona_oscura: '#374151', // Gris oscuro
+  otro: '#6B7280'         // Gris neutro (Soluciona el error TS)
+}
+
 export interface ZonaConReportes {
   zona: ZonaCaliente
   reportes: Reporte[]
-  /** Peso máximo de sus reportes (0–1): define el color de la zona. */
   intensidad: number
 }
 
-/** Ruta peatonal simulada hacia un punto seguro. */
 export interface RutaSegura {
   destino: PuntoSeguro
   puntos: [number, number][]
@@ -45,7 +52,6 @@ export interface RutaSegura {
 }
 
 // Recentra el mapa cuando cambia el centro objetivo y reporta el zoom
-// actual al padre (para decidir qué capas se muestran).
 function Controlador({
   centro,
   zoom,
@@ -64,17 +70,18 @@ function Controlador({
   return null
 }
 
-// ─── Íconos tipo Waze (burbuja con puntita) ───────────────────────
-// Se cachean por tipo para no regenerar el HTML en cada render.
+// ─── Generadores de Íconos ───
 const cacheReporte = new Map<TipoIncidente, L.DivIcon>()
 function iconoReporte(tipo: TipoIncidente): L.DivIcon {
   const existente = cacheReporte.get(tipo)
   if (existente) return existente
-  const { Icono, peso } = META_INCIDENTE[tipo]
-  const color = colorPorIntensidad(peso)
+
+  const { Icono } = META_INCIDENTE[tipo]
+  const colorIcono = COLORES_INCIDENTE[tipo] || '#D97706'
+
   const icono = L.divIcon({
     className: 'marcador-wrap',
-    html: `<div class="marcador-reporte" style="--c:${color}">${renderToStaticMarkup(
+    html: `<div class="marcador-reporte" style="--c:${colorIcono}">${renderToStaticMarkup(
       <Icono size={16} color="#fff" strokeWidth={2.5} />,
     )}</div>`,
     iconSize: [34, 44],
@@ -103,7 +110,6 @@ function iconoSeguro(tipo: TipoPuntoSeguro): L.DivIcon {
   return icono
 }
 
-// Burbuja de conteo por distrito (vista lejana). Cache por n + color.
 const cacheBurbuja = new Map<string, L.DivIcon>()
 function iconoBurbuja(n: number, color: string): L.DivIcon {
   const clave = `${n}|${color}`
@@ -121,7 +127,6 @@ function iconoBurbuja(n: number, color: string): L.DivIcon {
   return icono
 }
 
-// Punto azul pulsante "estás aquí" (ubicación simulada).
 const iconoUsuario = L.divIcon({
   className: 'marcador-wrap',
   html: '<div class="punto-usuario"></div>',
@@ -159,189 +164,205 @@ export default function MapaView({
   onAcercarDistrito,
 }: MapaViewProps) {
   const [zoomActual, setZoomActual] = useState(ZOOM_INICIAL)
+  const [estiloClaro, setEstiloClaro] = useState<boolean>(true)
   const conPines = zoomActual >= ZOOM_PINES
 
+  const tileUrl = estiloClaro
+    ? "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+    : "https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png"
+
   return (
-    <MapContainer
-      center={CENTRO_LIMA}
-      zoom={ZOOM_INICIAL}
-      zoomSnap={0.5}
-      zoomControl={false}
-      className="h-full w-full"
-    >
-      {/* Tiles CARTO Voyager: paleta clara y colorida, look tipo Waze. */}
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-        subdomains="abcd"
-        maxZoom={19}
-      />
-      <Controlador centro={centro} zoom={zoom} onZoom={setZoomActual} />
+    <div className="relative w-full h-full">
+      <button
+        onClick={() => setEstiloClaro(!estiloClaro)}
+        className={`absolute top-4 right-4 z-[1000] px-3.5 py-2 rounded-xl text-xs font-bold shadow-md border transition-all duration-200 flex items-center gap-1.5 active:scale-95
+          ${estiloClaro 
+            ? 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50 shadow-slate-200/40' 
+            : 'bg-slate-900 text-slate-200 border-slate-800 hover:bg-slate-800 shadow-black/30'}`}
+      >
+        <span>{estiloClaro ? '☀️ Estilo: Claro' : '🌙 Estilo: Oscuro'}</span>
+      </button>
 
-      {verRiesgo && (
-        <>
-          {/* De lejos, el calor da la lectura general; de cerca estorba. */}
-          {zoomActual < ZOOM_PINES && <CapaCalor reportes={reportes} />}
+      <MapContainer
+        center={CENTRO_LIMA}
+        zoom={ZOOM_INICIAL}
+        zoomSnap={0.5}
+        zoomControl={false}
+        className="h-full w-full"
+      >
+        <TileLayer
+          attribution='&copy; OpenStreetMap &copy; CARTO'
+          url={tileUrl}
+          subdomains="abcd"
+          maxZoom={19}
+        />
+        <Controlador centro={centro} zoom={zoom} onZoom={setZoomActual} />
 
-          {/* Zonas calientes: polígonos trazados por calles (nunca círculos). */}
-          {zonas.map((z) => {
-            const color = colorPorIntensidad(z.intensidad)
-            return (
-              <Polygon
-                key={z.zona.id}
-                positions={z.zona.poligono}
+        {verRiesgo && (
+          <>
+            {/* Capa de calor SIEMPRE activa (sin condicional de zoom) */}
+            <CapaCalor reportes={reportes} />
+
+            {/* Zonas Calientes y Tramos (Corredores) */}
+            {zonas.map((z) => {
+              const tipoPrincipal = z.reportes[0]?.tipo || 'otro'
+              const colorBase = COLORES_INCIDENTE[tipoPrincipal]
+              
+              // Forzamos a que las calles de robo y violencia sean de color rojo.
+              // Si prefieres que ABSOLUTAMENTE TODAS las calles peligrosas sean rojas,
+              // puedes cambiar esta línea por: const colorCalle = '#DC2626'
+              const colorCalle = (tipoPrincipal === 'robo' || tipoPrincipal === 'violencia') 
+                ? '#DC2626' 
+                : colorBase; 
+
+              return (
+                <Fragment key={z.zona.id}>
+                  {/* Polígono de la zona principal */}
+                  <Polygon
+                    positions={z.zona.poligono}
+                    pathOptions={{
+                      stroke: false,
+                      fillColor: colorBase,
+                      fillOpacity: estiloClaro ? 0.15 : 0.25,
+                      smoothFactor: 10,
+                    } as any}
+                    eventHandlers={{ click: () => onSeleccionarZona(z) }}
+                  />
+
+                  {/* Tramos convertidos en áreas de peligro rojas */}
+                  {z.zona.tramos.map((tramo, i) => (
+                    <Polyline
+                      key={`${z.zona.id}-t${i}`}
+                      positions={tramo}
+                      pathOptions={{
+                        color: colorCalle,
+                        weight: 35, // Grosor inmenso para efecto mancha/zona
+                        opacity: estiloClaro ? 0.3 : 0.4, 
+                        lineCap: 'round',
+                        lineJoin: 'round',
+                      }}
+                      eventHandlers={{ click: () => onSeleccionarZona(z) }}
+                    />
+                  ))}
+                </Fragment>
+              )
+            })}
+
+            {/* Pines y Burbujas */}
+            {conPines &&
+              reportes.map((r) => (
+                <Marker
+                  key={r.id}
+                  position={[r.lat, r.lng]}
+                  icon={iconoReporte(r.tipo)}
+                  eventHandlers={{ click: () => onSeleccionarReporte(r) }}
+                />
+              ))}
+            {!conPines &&
+              conteoPorDistrito.map(({ distrito, n, color }) => (
+                <Marker
+                  key={`burbuja-${distrito.id}`}
+                  position={[distrito.lat, distrito.lng]}
+                  icon={iconoBurbuja(n, color)}
+                  eventHandlers={{ click: () => onAcercarDistrito(distrito) }}
+                />
+              ))}
+          </>
+        )}
+
+        {/* Puntos Seguros */}
+        {verSeguros &&
+          puntosSeguros.map((p) => {
+            const { label } = META_PUNTO_SEGURO[p.tipo]
+            const popup = (
+              <Popup>
+                <div className="text-[13px]">
+                  <p className="font-bold text-emerald-600">{label}</p>
+                  <p className="text-slate-800">{p.nombre}</p>
+                  <p className="text-slate-500">{p.distrito}</p>
+                </div>
+              </Popup>
+            )
+            return conPines ? (
+              <Marker key={p.id} position={[p.lat, p.lng]} icon={iconoSeguro(p.tipo)}>
+                {popup}
+              </Marker>
+            ) : (
+              <CircleMarker
+                key={p.id}
+                center={[p.lat, p.lng]}
+                radius={5.5}
                 pathOptions={{
-                  color,
+                  color: '#ffffff',
                   weight: 2,
-                  opacity: 0.7,
-                  fillColor: color,
-                  fillOpacity: 0.16,
-                  lineJoin: 'round',
+                  fillColor: '#10B981',
+                  fillOpacity: 1,
                 }}
-                eventHandlers={{ click: () => onSeleccionarZona(z) }}
-              />
+              >
+                {popup}
+              </CircleMarker>
             )
           })}
 
-          {/* Tramos de calle pintados, como el tráfico de Waze:
-              línea blanca de base + color de la zona encima. */}
-          {zonas.flatMap((z) => {
-            const color = colorPorIntensidad(z.intensidad)
-            return z.zona.tramos.map((tramo, i) => (
-              <Fragment key={`${z.zona.id}-t${i}`}>
-                <Polyline
-                  positions={tramo}
-                  pathOptions={{
-                    color: '#fff',
-                    weight: 9,
-                    opacity: 0.85,
-                    lineCap: 'round',
-                    interactive: false,
-                  }}
-                />
-                <Polyline
-                  positions={tramo}
-                  pathOptions={{ color, weight: 5, opacity: 0.95, lineCap: 'round' }}
-                  eventHandlers={{ click: () => onSeleccionarZona(z) }}
-                />
-              </Fragment>
-            ))
-          })}
-
-          {/* De cerca: pines individuales. De lejos: una burbuja por distrito. */}
-          {conPines &&
-            reportes.map((r) => (
-              <Marker
-                key={r.id}
-                position={[r.lat, r.lng]}
-                icon={iconoReporte(r.tipo)}
-                eventHandlers={{ click: () => onSeleccionarReporte(r) }}
-              />
-            ))}
-          {!conPines &&
-            conteoPorDistrito.map(({ distrito, n, color }) => (
-              <Marker
-                key={`burbuja-${distrito.id}`}
-                position={[distrito.lat, distrito.lng]}
-                icon={iconoBurbuja(n, color)}
-                eventHandlers={{ click: () => onAcercarDistrito(distrito) }}
-              />
-            ))}
-        </>
-      )}
-
-      {/* Puntos seguros: puntitos de lejos, pines con ícono de cerca. */}
-      {verSeguros &&
-        puntosSeguros.map((p) => {
-          const { label } = META_PUNTO_SEGURO[p.tipo]
-          const popup = (
-            <Popup>
-              <div className="text-[13px]">
-                <p className="font-bold text-seguro">{label}</p>
-                <p className="text-tinta">{p.nombre}</p>
-                <p className="text-tinta/55">{p.distrito}</p>
-              </div>
-            </Popup>
-          )
-          return conPines ? (
-            <Marker key={p.id} position={[p.lat, p.lng]} icon={iconoSeguro(p.tipo)}>
-              {popup}
-            </Marker>
-          ) : (
-            <CircleMarker
-              key={p.id}
-              center={[p.lat, p.lng]}
-              radius={5}
+        {/* Ruta segura */}
+        {ruta && (
+          <>
+            <Polyline
+              positions={ruta.puntos}
               pathOptions={{
-                color: '#fff',
-                weight: 2,
-                fillColor: '#1FA971',
-                fillOpacity: 1,
+                color: estiloClaro ? '#ffffff' : '#1e293b',
+                weight: 10,
+                opacity: 0.9,
+                lineCap: 'round',
+                interactive: false,
               }}
-            >
-              {popup}
-            </CircleMarker>
-          )
-        })}
+            />
+            <Polyline
+              positions={ruta.puntos}
+              pathOptions={{
+                color: '#10B981',
+                weight: 5,
+                opacity: 0.95,
+                dashArray: '1 10',
+                lineCap: 'round',
+                interactive: false,
+              }}
+            />
+            <Circle
+              center={[ruta.destino.lat, ruta.destino.lng]}
+              radius={28}
+              pathOptions={{
+                color: '#10B981',
+                weight: 2,
+                opacity: 0.8,
+                fillColor: '#10B981',
+                fillOpacity: 0.15,
+                interactive: false,
+              }}
+            />
+          </>
+        )}
 
-      {/* Ruta segura simulada: línea punteada verde hasta el destino. */}
-      {ruta && (
-        <>
-          <Polyline
-            positions={ruta.puntos}
-            pathOptions={{
-              color: '#fff',
-              weight: 10,
-              opacity: 0.9,
-              lineCap: 'round',
-              interactive: false,
-            }}
-          />
-          <Polyline
-            positions={ruta.puntos}
-            pathOptions={{
-              color: '#1FA971',
-              weight: 5,
-              opacity: 0.95,
-              dashArray: '1 10',
-              lineCap: 'round',
-              interactive: false,
-            }}
-          />
-          <Circle
-            center={[ruta.destino.lat, ruta.destino.lng]}
-            radius={28}
-            pathOptions={{
-              color: '#1FA971',
-              weight: 2,
-              opacity: 0.8,
-              fillColor: '#1FA971',
-              fillOpacity: 0.15,
-              interactive: false,
-            }}
-          />
-        </>
-      )}
-
-      {/* Tu ubicación simulada (punto azul + halo de precisión). */}
-      <Circle
-        center={MI_UBICACION}
-        radius={90}
-        pathOptions={{
-          color: '#2E6BFF',
-          weight: 1,
-          opacity: 0.35,
-          fillColor: '#2E6BFF',
-          fillOpacity: 0.08,
-          interactive: false,
-        }}
-      />
-      <Marker
-        position={MI_UBICACION}
-        icon={iconoUsuario}
-        zIndexOffset={500}
-        interactive={false}
-      />
-    </MapContainer>
+        {/* Tu ubicación */}
+        <Circle
+          center={MI_UBICACION}
+          radius={90}
+          pathOptions={{
+            color: '#3B82F6',
+            weight: 1,
+            opacity: 0.35,
+            fillColor: '#3B82F6',
+            fillOpacity: 0.08,
+            interactive: false,
+          }}
+        />
+        <Marker
+          position={MI_UBICACION}
+          icon={iconoUsuario}
+          zIndexOffset={500}
+          interactive={false}
+        />
+      </MapContainer>
+    </div>
   )
 }

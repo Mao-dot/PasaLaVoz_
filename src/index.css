@@ -81,6 +81,7 @@
   border: 3px solid #fff;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.35);
   animation: pop-in 0.25s ease-out both;
+  transition: background-color 0.2s ease;
 }
 .marcador-reporte::after {
   /* puntita blanca (continúa el borde) */
@@ -93,7 +94,7 @@
   border-top: 10px solid #fff;
 }
 .marcador-reporte::before {
-  /* puntita interior del color del tipo */
+  /* puntita interior dinámica basada en el color del marcador */
   content: '';
   position: absolute;
   left: 50%;
@@ -102,6 +103,7 @@
   border: 5px solid transparent;
   border-top: 7px solid var(--c, #e23b3b);
   z-index: 1;
+  transition: border-top-color 0.2s ease;
 }
 .marcador-reporte svg {
   position: relative;
@@ -114,7 +116,7 @@
   width: 28px;
   height: 28px;
   border-radius: 9999px;
-  background: #1fa971;
+  background: #10B981; /* Verde esmeralda para diferenciarse claramente */
   border: 2.5px solid #fff;
   box-shadow: 0 3px 10px rgba(15, 23, 42, 0.3);
   animation: pop-in 0.25s ease-out both;
@@ -271,4 +273,28 @@
 }
 .entrar-item {
   animation: entrar-item 0.4s ease-out both;
+}
+
+.marcador-escudo {
+  width: 36px;
+  height: 42px;
+  background-color: var(--c);
+  border-radius: 50% 50% 50% 50% / 30% 30% 70% 70%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  position: relative;
+  border: 2px solid white;
+}
+
+.marcador-escudo::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid white;
 }
