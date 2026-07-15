@@ -3,32 +3,31 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import type { Contacto, Reporte } from '../data/types'
 import { reportesSemilla } from '../data/reportes'
 import { contactosSemilla } from '../data/contactos'
+import { crearRegistroUnico } from '../lib/guards'
 
 // Estado global del prototipo. Todo vive en memoria (sin backend).
 interface AppState {
-  // Sesión
   modo: 'anonimo' | 'cuenta'
   entrarAnonimo: () => void
   crearCuenta: () => void
 
-  // Reportes
   reportes: Reporte[]
-  agregarReporte: (nuevo: Omit<Reporte, 'id' | 'estado' | 'confirmaciones'>) => Reporte
+  agregarReporte: (
+    nuevo: Omit<Reporte, 'id' | 'estado' | 'confirmaciones' | 'esPropio'>,
+  ) => Reporte
   eliminarReporte: (id: string) => void
-  /** Validación comunitaria: suma un "yo también lo vi" (una vez por reporte). */
   confirmarReporte: (id: string) => void
-  /** Ids de reportes que este usuario ya confirmó. */
   misConfirmaciones: Set<string>
 
-  // Contactos de confianza
   contactos: Contacto[]
-  agregarContacto: (c: Omit<Contacto, 'id'>) => void
+  agregarContacto: (contacto: Omit<Contacto, 'id'>) => void
   eliminarContacto: (id: string) => void
 }
 
@@ -38,23 +37,23 @@ let _id = 1000
 const nuevoId = (prefijo: string) => `${prefijo}${++_id}`
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const eliminarReporte = useCallback((id: string) => {
-  setReportes((prev) => prev.filter((reporte) => reporte.id !== id))
-  }, [])
   const [modo, setModo] = useState<'anonimo' | 'cuenta'>('anonimo')
   const [reportes, setReportes] = useState<Reporte[]>(reportesSemilla)
   const [contactos, setContactos] = useState<Contacto[]>(contactosSemilla)
+  const confirmacionesProcesadas = useRef(crearRegistroUnico())
+  const [misConfirmaciones, setMisConfirmaciones] = useState<Set<string>>(new Set())
 
   const entrarAnonimo = useCallback(() => setModo('anonimo'), [])
   const crearCuenta = useCallback(() => setModo('cuenta'), [])
 
   const agregarReporte = useCallback(
-    (nuevo: Omit<Reporte, 'id' | 'estado' | 'confirmaciones'>) => {
+    (nuevo: Omit<Reporte, 'id' | 'estado' | 'confirmaciones' | 'esPropio'>) => {
       const reporte: Reporte = {
         ...nuevo,
         id: nuevoId('r'),
         estado: 'recibido',
         confirmaciones: 0,
+        esPropio: true,
       }
       setReportes((prev) => [reporte, ...prev])
       return reporte
@@ -62,26 +61,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   )
 
-  const [misConfirmaciones, setMisConfirmaciones] = useState<Set<string>>(new Set())
-  const confirmarReporte = useCallback(
-    (id: string) => {
-      if (misConfirmaciones.has(id)) return
-      setMisConfirmaciones((prev) => new Set(prev).add(id))
-      setReportes((prev) =>
-        prev.map((r) =>
-          r.id === id ? { ...r, confirmaciones: r.confirmaciones + 1 } : r,
-        ),
-      )
-    },
-    [misConfirmaciones],
-  )
+  const eliminarReporte = useCallback((id: string) => {
+    setReportes((prev) => prev.filter((reporte) => reporte.id !== id))
+  }, [])
 
-  const agregarContacto = useCallback((c: Omit<Contacto, 'id'>) => {
-    setContactos((prev) => [...prev, { ...c, id: nuevoId('c') }])
+  const confirmarReporte = useCallback((id: string) => {
+    // Evita que dos taps ocurridos antes del siguiente render incrementen dos
+    // veces la misma confirmación.
+    if (!confirmacionesProcesadas.current.registrar(id)) return
+
+    setMisConfirmaciones((prev) => new Set(prev).add(id))
+    setReportes((prev) =>
+      prev.map((reporte) =>
+        reporte.id === id
+          ? { ...reporte, confirmaciones: reporte.confirmaciones + 1 }
+          : reporte,
+      ),
+    )
+  }, [])
+
+  const agregarContacto = useCallback((contacto: Omit<Contacto, 'id'>) => {
+    setContactos((prev) => [...prev, { ...contacto, id: nuevoId('c') }])
   }, [])
 
   const eliminarContacto = useCallback((id: string) => {
-    setContactos((prev) => prev.filter((c) => c.id !== id))
+    setContactos((prev) => prev.filter((contacto) => contacto.id !== id))
   }, [])
 
   const value = useMemo<AppState>(
@@ -91,12 +95,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crearCuenta,
       reportes,
       agregarReporte,
+      eliminarReporte,
       confirmarReporte,
       misConfirmaciones,
       contactos,
       agregarContacto,
       eliminarContacto,
-      eliminarReporte,
     }),
     [
       modo,
@@ -104,6 +108,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crearCuenta,
       reportes,
       agregarReporte,
+      eliminarReporte,
       confirmarReporte,
       misConfirmaciones,
       contactos,

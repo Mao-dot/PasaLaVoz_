@@ -30,3 +30,16 @@ Thumbs.db
 
 # Claude
 .claude/*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Typescript build cache
+*.tsbuildinfo
+
+# Generated Agent Reports
+*_REPORT.md
+*_REVIEW.md
+CHANGELOG_WORK.md

@@ -65,7 +65,9 @@ function Controlador({
     zoomend: () => onZoom(map.getZoom()),
   })
   useEffect(() => {
-    map.flyTo(centro, zoom, { duration: 0.6 })
+    const actual = map.getCenter()
+    if (Math.abs(actual.lat - centro[0]) < 1e-6 && Math.abs(actual.lng - centro[1]) < 1e-6 && map.getZoom() === zoom) return
+    map.flyTo(centro, zoom, { duration: 0.45 })
   }, [map, centro, zoom])
   return null
 }
@@ -186,7 +188,8 @@ export default function MapaView({
       <MapContainer
         center={CENTRO_LIMA}
         zoom={ZOOM_INICIAL}
-        zoomSnap={0.5}
+        zoomSnap={0.25}
+        wheelDebounceTime={25}
         zoomControl={false}
         className="h-full w-full"
       >
@@ -201,7 +204,7 @@ export default function MapaView({
         {verRiesgo && (
           <>
             {/* Capa de calor SIEMPRE activa (sin condicional de zoom) */}
-            <CapaCalor reportes={reportes} />
+            {!conPines && <CapaCalor reportes={reportes} />}
 
             {/* Zonas Calientes y Tramos (Corredores) */}
             {zonas.map((z) => {

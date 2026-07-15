@@ -69,6 +69,7 @@ export interface Reporte {
   estado: EstadoReporte
   /** Vecinos que confirmaron haber visto lo mismo (validación comunitaria). */
   confirmaciones: number
+  esPropio?: boolean
 }
 
 export type TipoPuntoSeguro =
